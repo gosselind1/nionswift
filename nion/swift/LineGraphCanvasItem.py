@@ -1136,6 +1136,8 @@ class LineGraphLegendCanvasItemDelegate:
 
     def create_rgba_image(self, drawing_context: DrawingContext.DrawingContext, width: int, height: int) -> _NDArray: ...
 
+    def show_display_context_menu(self, gx, gy) -> bool: ...
+
 
 class LineGraphLegendCanvasItem(CanvasItem.AbstractCanvasItem):
     """Canvas item to draw the line plot background and grid lines."""
@@ -1454,3 +1456,8 @@ class LineGraphLegendCanvasItem(CanvasItem.AbstractCanvasItem):
                 if legend_entry.stroke_color:
                     drawing_context.stroke_style = legend_entry.stroke_color
                     drawing_context.stroke()
+
+    def context_menu_event(self, x: int, y: int, gx: int, gy: int) -> bool:
+        assert self.__delegate
+        # print("yeet")
+        return self.__delegate.show_display_context_menu(gx, gy)
