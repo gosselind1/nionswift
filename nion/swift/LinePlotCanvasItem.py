@@ -121,6 +121,16 @@ class LinePlotCanvasItem(DisplayCanvasItem.DisplayCanvasItem):
         self.__line_graph_legend_column.layout = CanvasItem.CanvasItemColumnLayout()
         self.__line_graph_legend_column.add_canvas_item(self.__line_graph_legend_row)
         self.__line_graph_legend_column.add_stretch()
+        self.__line_graph_outer_left_column = CanvasItem.CanvasItemComposition()
+        self.__line_graph_outer_left_column.layout = CanvasItem.CanvasItemColumnLayout(margins=Geometry.Margins(16, 16, 0, 0))
+        self.__line_graph_outer_left_legend = LineGraphCanvasItem.LineGraphLegendCanvasItem(ui_settings, typing.cast(LineGraphCanvasItem.LineGraphLegendCanvasItemDelegate, delegate))
+        self.__line_graph_outer_left_column.add_canvas_item(self.__line_graph_outer_left_legend)
+        self.__line_graph_outer_left_column.add_stretch()
+        self.__line_graph_outer_right_column = CanvasItem.CanvasItemComposition()
+        self.__line_graph_outer_right_column.layout = CanvasItem.CanvasItemColumnLayout(margins=Geometry.Margins(16, 0, 0, 16))
+        self.__line_graph_outer_right_legend = LineGraphCanvasItem.LineGraphLegendCanvasItem(ui_settings, typing.cast(LineGraphCanvasItem.LineGraphLegendCanvasItemDelegate, delegate))
+        self.__line_graph_outer_right_column.add_canvas_item(self.__line_graph_outer_right_legend)
+        self.__line_graph_outer_right_column.add_stretch()
         self.__line_graph_frame_canvas_item = LineGraphCanvasItem.LineGraphFrameCanvasItem()
         self.__line_graph_area_stack.add_canvas_item(self.__line_graph_background_canvas_item)
         self.__line_graph_area_stack.add_canvas_item(self.__line_graph_stack)
@@ -161,12 +171,20 @@ class LinePlotCanvasItem(DisplayCanvasItem.DisplayCanvasItem):
         self.__overlap_controls.layout = CanvasItem.CanvasItemColumnLayout()
         self.__overlap_controls.add_stretch()
 
+        # create and add the outer level labels
+        legend_row = CanvasItem.CanvasItemComposition()
+        legend_row.layout = CanvasItem.CanvasItemRowLayout()
+        legend_row.add_canvas_item(self.__line_graph_outer_left_column)
+        legend_row.add_canvas_item(line_graph_group_canvas_item)
+        legend_row.add_canvas_item(self.__line_graph_outer_right_column)
+
         # draw the background
         line_graph_background_canvas_item = CanvasItem.CanvasItemComposition()
         #line_graph_background_canvas_item.update_sizing(line_graph_background_canvas_item.size.with_minimum_aspect_ratio(1.5))  # note: no maximum aspect ratio; line plot looks nice wider.
         line_graph_background_canvas_item.add_canvas_item(CanvasItem.BackgroundCanvasItem("#FFF"))
-        line_graph_background_canvas_item.add_canvas_item(line_graph_group_canvas_item)
         line_graph_background_canvas_item.add_canvas_item(self.__overlap_controls)
+
+        line_graph_background_canvas_item.add_canvas_item(legend_row)
 
         self.__display_controls = CanvasItem.CanvasItemComposition()
         self.__display_controls.layout = CanvasItem.CanvasItemColumnLayout()
@@ -247,16 +265,25 @@ class LinePlotCanvasItem(DisplayCanvasItem.DisplayCanvasItem):
 
     def __update_legend_origin(self) -> None:
         self.__line_graph_legend_canvas_item.size_to_content()
+        self.__line_graph_outer_left_legend.size_to_content()
+        self.__line_graph_outer_right_legend.size_to_content()
+
+        self.__line_graph_legend_row.visible = False
+        self.__line_graph_legend_row.canvas_items[0].visible = False
+        self.__line_graph_legend_row.canvas_items[2].visible = False
+        self.__line_graph_outer_right_column.visible = False
+        self.__line_graph_outer_left_column.visible = False
+
         if self.__legend_position == "top-left":
-            self.__line_graph_legend_canvas_item.visible = True
-            self.__line_graph_legend_row.canvas_items[0].visible = False
+            self.__line_graph_legend_row.visible= True
             self.__line_graph_legend_row.canvas_items[2].visible = True
         elif self.__legend_position == "top-right":
-            self.__line_graph_legend_canvas_item.visible = True
+            self.__line_graph_legend_row.visible = True
             self.__line_graph_legend_row.canvas_items[0].visible = True
-            self.__line_graph_legend_row.canvas_items[2].visible = False
-        else:
-            self.__line_graph_legend_canvas_item.visible = False
+        elif self.__legend_position == "outer-left":
+            self.__line_graph_outer_left_column.visible = True
+        elif self.__legend_position == "outer-right":
+            self.__line_graph_outer_right_column.visible = True
 
     def add_display_control(self, display_control_canvas_item: CanvasItem.AbstractCanvasItem, role: typing.Optional[str] = None) -> None:
         if role == "related_icons":
@@ -393,37 +420,42 @@ class LinePlotCanvasItem(DisplayCanvasItem.DisplayCanvasItem):
 
     def __view_to_intervals(self, data_and_metadata: DataAndMetadata.DataAndMetadata, intervals: typing.List[typing.Tuple[float, float]]) -> None:
         """Change the view to encompass the channels and data represented by the given intervals."""
-        left = None
-        right = None
-        for interval in intervals:
-            if left is not None:
-                left = min(left, interval[0])
-            else:
-                left = interval[0]
-            if right is not None:
-                right = max(right, interval[1])
-            else:
-                right = interval[1]
-        left = left if left is not None else 0.0
-        right = right if right is not None else 1.0
-        left_channel = int(max(0.0, left) * data_and_metadata.data_shape[-1])
-        right_channel = int(min(1.0, right) * data_and_metadata.data_shape[-1])
-        data_in_channel = data_and_metadata.data
-        assert data_in_channel is not None
-        data_min = numpy.amin(data_in_channel[..., left_channel:right_channel])
-        data_max = numpy.amax(data_in_channel[..., left_channel:right_channel])
-        if data_min > 0 and data_max > 0:
-            y_min = 0.0
-            y_max = data_max * 1.2
-        elif data_min < 0 and data_max < 0:
-            y_min = data_min * 1.2
-            y_max = 0.0
+
+        if len(intervals) > 0:
+            left = intervals[0][0]
+            right = intervals[0][1]
+            for interval in intervals:
+                left = min(interval[0], left)
+                right = max(interval[1], right)
         else:
-            y_min = data_min * 1.2
-            y_max = data_max * 1.2
-        extra = (right - left) * 0.5
-        display_left_channel = int(max(0.0, left - extra) * data_and_metadata.data_shape[-1])
-        display_right_channel = int(min(1.0, right + extra) * data_and_metadata.data_shape[-1])
+            left = right = 0.0
+
+        data_size = int(data_and_metadata.data_shape[-1])
+        left_channel = int(numpy.floor(left * data_size))
+        right_channel = int(numpy.ceil(right * data_size))
+        if left_channel > right_channel:
+            right_channel, left_channel = left_channel, right_channel
+        if left_channel not in range(data_size):
+            left_channel = 0
+        if right_channel not in range(data_size):
+            right_channel = data_size
+
+        channel_data = data_and_metadata.data
+        assert channel_data is not None
+        if channel_data[..., left_channel:right_channel].size > 0:
+            data_min = numpy.amin(channel_data[..., left_channel:right_channel])
+            data_max = numpy.amax(channel_data[..., left_channel:right_channel])
+        else:
+            data_min = numpy.amin(channel_data[..., :])
+            data_max = numpy.amax(channel_data[..., :])
+
+        y_min = 0.0 if data_min > 0 else data_min * 1.2
+        y_max = 0.0 if data_max < 0 else data_max * 1.2
+
+        x_padding = (right - left) * 0.5
+        display_left_channel = int((left - x_padding) * data_size)
+        display_right_channel = int((right + x_padding) * data_size)
+
         # command = self.delegate.create_change_display_command()
         assert self.delegate
         self.delegate.update_display_properties({"left_channel": display_left_channel, "right_channel": display_right_channel, "y_min": y_min, "y_max": y_max})
@@ -633,6 +665,8 @@ class LinePlotCanvasItem(DisplayCanvasItem.DisplayCanvasItem):
         self.__line_graph_regions_canvas_item.set_calibrated_data(self.line_graph_canvas_item.calibrated_xdata.data if self.line_graph_canvas_item and self.line_graph_canvas_item.calibrated_xdata else None)
         self.__line_graph_frame_canvas_item.set_draw_frame(bool(axes))
         self.__line_graph_legend_canvas_item.set_legend_entries(legend_entries)
+        self.__line_graph_outer_left_legend.set_legend_entries(legend_entries)
+        self.__line_graph_outer_right_legend.set_legend_entries(legend_entries)
         self.__update_legend_origin()
         self.__line_graph_vertical_axis_label_canvas_item.set_axes(axes)
         self.__line_graph_vertical_axis_scale_canvas_item.set_axes(axes, self.__ui_settings)
