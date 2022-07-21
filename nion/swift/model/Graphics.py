@@ -597,16 +597,16 @@ def test_rectangle(p: Geometry.FloatPoint, radius: float, center: Geometry.Float
 
     # top line
     if test_line(top_left, top_right, p, radius):
-        return "all", True
+        return "top-edge", True
     # bottom line
     if test_line(bottom_left, bottom_right, p, radius):
-        return "all", True
+        return "bottom-edge", True
     # left line
     if test_line(top_left, bottom_left, p, radius):
-        return "all", True
+        return "left-edge", True
     # right line
     if test_line(top_right, bottom_right, p, radius):
-        return "all", True
+        return "right-edge", True
 
     if test_inside_bounds(rect_widget, test_point_unrotated, radius):
         return "all", False
