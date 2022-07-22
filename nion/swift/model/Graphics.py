@@ -405,6 +405,53 @@ def adjust_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds
     return new_bounds, new_rotation
 
 
+def adjust_rectangle_like2(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
+                          is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
+                          current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
+                          constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
+    scale_positions = {"top-left", "top-right", "bottom-left", "bottom-right", "top-edge", "bottom-edge", "left-edge",
+                       "right-edge"}
+
+    if (part_name == "all" or "shape" in constraints) and not "position" in constraints:
+        return translate_rectangle_like(part_name, data_shape, bounds, rotation, is_center_constant_by_default,
+                                        original_image, current_image, original_rotation, modifiers, constraints)
+
+    elif part_name and part_name.endswith("rotate") and not "rotation" in constraints:
+        return rotate_rectangle_like(part_name, data_shape, bounds, rotation, is_center_constant_by_default,
+                                     original_image, current_image, original_rotation, modifiers, constraints)
+
+    elif part_name in scale_positions and not "shape" in constraints:
+        return scale_rectangle_like(part_name, data_shape, bounds, rotation, is_center_constant_by_default,
+                                    original_image, current_image, original_rotation, modifiers, constraints)
+
+    else:
+        # Return original configuration otherwise.
+        # The original function converts bounds into a Geometry.map_rect, but since they're the same object type and
+        # no conversion appears to be happening this should be fine :tm:
+        return bounds, rotation
+
+
+def translate_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
+                          is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
+                          current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
+                          constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
+    ...
+
+
+def rotate_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
+                          is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
+                          current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
+                          constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
+    ...
+
+
+def scale_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
+                          is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
+                          current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
+                          constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
+    ...
+
+
 def draw_ellipse(ctx: DrawingContextLike, center: Geometry.FloatPoint, size: Geometry.FloatSize, stroke_style: typing.Optional[str], fill_style: typing.Optional[str]) -> None:
     cx, cy = center.x, center.y
     rx, ry = size.width, size.height
