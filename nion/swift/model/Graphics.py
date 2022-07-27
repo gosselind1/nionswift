@@ -176,7 +176,7 @@ class ModifiersLike(typing.Protocol):
     def control(self) -> bool: raise NotImplementedError()
 
 
-def adjust_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
+def adjust_rectangle_like_old(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
                           is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
                           current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
                           constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
@@ -405,12 +405,11 @@ def adjust_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds
     return new_bounds, new_rotation
 
 
-def adjust_rectangle_like2(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
+def adjust_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
                           is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
                           current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
                           constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
-    scale_positions = {"top-left", "top-right", "bottom-left", "bottom-right", "top-edge", "bottom-edge", "left-edge",
-                       "right-edge"}
+    scale_positions = {"top-left", "top-right", "bottom-left", "bottom-right"}
 
     if (part_name == "all" or "shape" in constraints) and not "position" in constraints:
         return translate_rectangle_like(part_name, data_shape, bounds, rotation, is_center_constant_by_default,
@@ -435,21 +434,112 @@ def translate_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bou
                           is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
                           current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
                           constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
-    ...
+    delta = current_image - original_image
+    bounds_image = Geometry.map_rect(bounds, Geometry.FloatRect.unit_rect(),
+                                     Geometry.FloatRect(origin=Geometry.FloatPoint(), size=data_shape))
+    if modifiers.shift:
+        if abs(delta.y) > abs(delta.x):
+            origin = Geometry.FloatPoint(y=bounds_image.top + delta.y, x=bounds_image.left)
+        else:
+            origin = Geometry.FloatPoint(y=bounds_image.top, x=bounds_image.left + delta.x)
+    else:
+        origin = bounds_image.top_left + delta
+    if "bounds" in constraints:
+        origin = Geometry.FloatPoint(y=min(max(origin.y, 0.0), data_shape.height - bounds_image.height),
+                                     x=min(max(origin.x, 0.0), data_shape.width - bounds_image.width))
+    new_bounds_image = Geometry.FloatRect(origin=origin, size=bounds_image.size)
+
+    new_bounds = Geometry.map_rect(new_bounds_image, Geometry.FloatRect(origin=Geometry.FloatPoint(), size=data_shape),
+                                   Geometry.FloatRect.unit_rect())
+    return new_bounds, rotation
 
 
 def rotate_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
                           is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
                           current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
                           constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
-    ...
+    original_delta = original_image - bounds.center
+    current_delta = current_image - bounds.center
+    original_angle = math.atan2(-original_delta.y, original_delta.x)
+    current_angle = math.atan2(-current_delta.y, current_delta.x)
+    new_rotation = original_rotation + (current_angle - original_angle)
+    if modifiers.shift:
+        new_rotation = 2 * math.pi * int(8 * (new_rotation / (2 * math.pi)) + 0.5) / 8
+    return bounds, new_rotation
 
 
 def scale_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds: Geometry.FloatRect, rotation: float,
                           is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
                           current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
                           constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
+    # origin to size split-- 0 is all origin 1 is all size
+    POSITION_FACTOR = {"top-left": (0.0, 0.0),
+                       "top-right": (1.0, 0.0),
+                       "bottom-left": (0.0, 1.0),
+                       "bottom-right": (1.0, 1.0)}
+
+    # In order to work, we need to scale up, and then back down later
+    bounds_image = Geometry.map_rect(bounds, Geometry.FloatRect.unit_rect(),
+                                     Geometry.FloatRect(origin=Geometry.FloatPoint(), size=data_shape))
+
+    # apply delta to x/y coordinate to get the active location we're working with
+    x = bounds_image.origin.x + (POSITION_FACTOR[part_name][0] * bounds_image.width)
+    y = bounds_image.origin.y + (POSITION_FACTOR[part_name][1] * bounds_image.height)
+
+    # I might need to consider rotation? Will come back to that
     ...
+
+    # Current image is the position of the mouse or *something* based around the current corner
+    x_change = x + current_image.x
+    y_change = y + current_image.y
+
+    # Percent of change value applied to origin and size
+    w_percent = POSITION_FACTOR[part_name][0]
+    h_percent = POSITION_FACTOR[part_name][1]
+    x_percent = (POSITION_FACTOR[part_name][0] + 1.0) % 2
+    y_percent = (POSITION_FACTOR[part_name][1] + 1.0) % 2
+
+    # handle modifiers except bounds
+    if (bool(modifiers.alt) != bool(is_center_constant_by_default)) or "position" in constraints:
+        w_percent = h_percent = x_percent = y_percent = 1.0
+    if modifiers.shift or "square" in constraints:
+        min_current = min(current_image.x, current_image.y)
+        x_change = x + min_current
+        y_change = y + min_current
+
+    # Determine new geometry
+    new_width = bounds_image.size.width + (w_percent * x_change)
+    new_height = bounds_image.size.height + (h_percent * y_change)
+    new_origin_x = bounds_image.origin.x + (x_percent * x_change)
+    new_origin_y = bounds_image.origin.y + (y_percent * y_change)
+
+    # Apply bounds constraints
+    if "bounds" in constraints:
+        new_origin_x = max(min(new_origin_x, data_shape.width), 0.0)
+        new_origin_y = max(min(new_origin_y, data_shape.height), 0.0)
+
+        width_size = new_origin_x + new_width
+        if width_size > data_shape.width:  # is there a simpler way to compute this?
+            new_width = data_shape.width - new_origin_x
+        elif width_size < 0.0:
+            new_width = 0 - new_origin_x
+
+        height_size = new_origin_y + new_height
+        if height_size > data_shape.height:
+            new_height = data_shape.height - new_origin_y
+        elif height_size < 0.0:
+            new_height = 0 - new_origin_y
+
+    # generate new geometry object
+    new_origin = Geometry.FloatPoint(new_origin_y, new_origin_x)
+    new_size = Geometry.FloatSize(new_height, new_width)
+    new_bounds_image = Geometry.FloatRect(new_origin, new_size)
+
+    # Scale back to input sizes
+    new_bounds = Geometry.map_rect(new_bounds_image, Geometry.FloatRect(origin=Geometry.FloatPoint(), size=data_shape),
+                                   Geometry.FloatRect.unit_rect())
+
+    return new_bounds, rotation
 
 
 def draw_ellipse(ctx: DrawingContextLike, center: Geometry.FloatPoint, size: Geometry.FloatSize, stroke_style: typing.Optional[str], fill_style: typing.Optional[str]) -> None:
