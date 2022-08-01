@@ -472,49 +472,42 @@ def scale_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds:
                           is_center_constant_by_default: bool, original_image: Geometry.FloatPoint,
                           current_image: Geometry.FloatPoint, original_rotation: float, modifiers: ModifiersLike,
                           constraints: typing.Set[str]) -> typing.Tuple[Geometry.FloatRect, float]:
-    # origin to size split-- 0 is all origin 1 is all size
-    POSITION_FACTOR = {"top-left": (0.0, 0.0),
-                       "top-right": (1.0, 0.0),
-                       "bottom-left": (0.0, 1.0),
-                       "bottom-right": (1.0, 1.0)}
 
-    # In order to work, we need to scale up, and then back down later
+    SCALE_FACTOR = {"top-left": (1.0, 1.0, -1.0, -1.0), #x,y,w,h
+                    "top-right": (0.0, 1.0, 1.0, -1.0),
+                    "bottom-left": (1.0, 0.0, -1.0, 1.0),
+                    "bottom-right": (0.0, 0.0, 1.0, 1.0)}
+
+    # bounds is not pre-scaled like the other geometric objects
     bounds_image = Geometry.map_rect(bounds, Geometry.FloatRect.unit_rect(),
                                      Geometry.FloatRect(origin=Geometry.FloatPoint(), size=data_shape))
 
-    # apply delta to x/y coordinate to get the active location we're working with
-    x = bounds_image.origin.x + (POSITION_FACTOR[part_name][0] * bounds_image.width)
-    y = bounds_image.origin.y + (POSITION_FACTOR[part_name][1] * bounds_image.height)
+    # Current image represents absolute mouse position
+    delta = original_image - current_image
+    delta_x = delta.x
+    delta_y = delta.y
 
-    # I might need to consider rotation? Will come back to that
-    ...
-
-    # Current image is the position of the mouse or *something* based around the current corner
-    x_change = x + current_image.x
-    y_change = y + current_image.y
-
-    # Percent of change value applied to origin and size
-    w_percent = POSITION_FACTOR[part_name][0]
-    h_percent = POSITION_FACTOR[part_name][1]
-    x_percent = (POSITION_FACTOR[part_name][0] + 1.0) % 2
-    y_percent = (POSITION_FACTOR[part_name][1] + 1.0) % 2
-
-    # handle modifiers except bounds
+    x_percent, y_percent, w_percent, h_percent = SCALE_FACTOR[part_name]
     if (bool(modifiers.alt) != bool(is_center_constant_by_default)) or "position" in constraints:
-        w_percent = h_percent = x_percent = y_percent = 1.0
+        x_percent = (x_percent * 2) - 1
+        y_percent = (y_percent * 2) - 1
+        w_percent *= 2
+        h_percent *= 2
+
+    x_change = delta_x * x_percent
+    y_change = delta_y * y_percent
+    w_change = delta_x * w_percent
+    h_change = delta_y * h_percent
+
+    new_origin_x = bounds_image.top_left.x - x_change
+    new_origin_y = bounds_image.top_left.y - y_change
+    new_width = bounds_image.width - w_change
+    new_height = bounds_image.height - h_change
+
     if modifiers.shift or "square" in constraints:
-        min_current = min(current_image.x, current_image.y)
-        x_change = x + min_current
-        y_change = y + min_current
+        ...
 
-    # Determine new geometry
-    new_width = bounds_image.size.width + (w_percent * x_change)
-    new_height = bounds_image.size.height + (h_percent * y_change)
-    new_origin_x = bounds_image.origin.x + (x_percent * x_change)
-    new_origin_y = bounds_image.origin.y + (y_percent * y_change)
-
-    # Apply bounds constraints
-    if "bounds" in constraints:
+    if modifiers.control or "bounds" in constraints:
         new_origin_x = max(min(new_origin_x, data_shape.width), 0.0)
         new_origin_y = max(min(new_origin_y, data_shape.height), 0.0)
 
@@ -530,7 +523,6 @@ def scale_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds:
         elif height_size < 0.0:
             new_height = 0 - new_origin_y
 
-    # generate new geometry object
     new_origin = Geometry.FloatPoint(new_origin_y, new_origin_x)
     new_size = Geometry.FloatSize(new_height, new_width)
     new_bounds_image = Geometry.FloatRect(new_origin, new_size)
