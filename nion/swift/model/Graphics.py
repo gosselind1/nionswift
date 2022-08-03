@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import gettext
+import logging
 import math
 
 # third party libraries
@@ -484,8 +485,6 @@ def scale_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds:
 
     # Current image represents absolute mouse position
     delta = original_image - current_image
-    delta_x = delta.x
-    delta_y = delta.y
 
     x_percent, y_percent, w_percent, h_percent = SCALE_FACTOR[part_name]
     if (bool(modifiers.alt) != bool(is_center_constant_by_default)) or "position" in constraints:
@@ -494,18 +493,27 @@ def scale_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds:
         w_percent *= 2
         h_percent *= 2
 
-    x_change = delta_x * x_percent
-    y_change = delta_y * y_percent
-    w_change = delta_x * w_percent
-    h_change = delta_y * h_percent
+    x_change = delta.x * x_percent
+    y_change = delta.y * y_percent
+    w_change = delta.x * w_percent
+    h_change = delta.y * h_percent
 
+    # Absolute positions
     new_origin_x = bounds_image.top_left.x - x_change
     new_origin_y = bounds_image.top_left.y - y_change
     new_width = bounds_image.width - w_change
     new_height = bounds_image.height - h_change
 
     if modifiers.shift or "square" in constraints:
-        ...
+        x_distance = current_image.x - (bounds_image.top_left.x + (bounds_image.width * w_percent if w_percent < 0 else 0))
+        y_distance = current_image.y - (bounds_image.top_left.y + (bounds_image.height * h_percent if h_percent < 0 else 0))
+        min_distance = min(x_distance, y_distance)
+        min_side = min(bounds_image.width, bounds_image.height)
+        new_origin_x = bounds_image.top_left.x + (min_distance * x_percent)
+        new_origin_y = bounds_image.top_left.y + (min_distance * y_percent)
+        max_abs_side_percent = max(abs(w_percent), abs(h_percent))
+        new_width = min_side + (min_distance * (max_abs_side_percent * (w_percent ** 0)))
+        new_height = min_side + (min_distance * (max_abs_side_percent * (h_percent ** 0)))
 
     if modifiers.control or "bounds" in constraints:
         new_origin_x = max(min(new_origin_x, data_shape.width), 0.0)
