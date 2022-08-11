@@ -516,20 +516,27 @@ def scale_rectangle_like(part_name: str, data_shape: Geometry.FloatSize, bounds:
         new_height = min_side + (min_distance * (max_abs_side_percent * (h_percent ** 0)))
 
     if modifiers.control or "bounds" in constraints:
-        new_origin_x = max(min(new_origin_x, data_shape.width), 0.0)
-        new_origin_y = max(min(new_origin_y, data_shape.height), 0.0)
+        if new_origin_x > data_shape.width:
+            new_origin_x = data_shape.width
+        elif new_origin_x < 0.0:
+            new_origin_x = 0.0
 
-        width_size = new_origin_x + new_width
-        if width_size > data_shape.width:  # is there a simpler way to compute this?
+        if new_origin_y > data_shape.height:
+            new_origin_y = data_shape.height
+        elif new_origin_y < 0.0:
+            new_origin_y = 0
+
+        width_position = new_origin_x + new_width
+        if width_position > data_shape.width:
             new_width = data_shape.width - new_origin_x
-        elif width_size < 0.0:
-            new_width = 0 - new_origin_x
+        elif width_position < 0.0:
+            new_width = -new_origin_x
 
-        height_size = new_origin_y + new_height
-        if height_size > data_shape.height:
+        height_position = new_origin_y + new_height
+        if height_position > data_shape.height:
             new_height = data_shape.height - new_origin_y
-        elif height_size < 0.0:
-            new_height = 0 - new_origin_y
+        elif height_position < 0.0:
+            new_height = -new_origin_y
 
     new_origin = Geometry.FloatPoint(new_origin_y, new_origin_x)
     new_size = Geometry.FloatSize(new_height, new_width)
